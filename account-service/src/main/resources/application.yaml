@@ -2,11 +2,18 @@ spring:
   application:
     name: account-service
   datasource:
-    url: jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1 # Keeps data alive as long as the app runs
-    //url: jdbc:h2:mem:bankdb
     driverClassName: org.h2.Driver
-    username: sa
-    password: password
+    #url: jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1 # Keeps data alive as long as the app runs
+    #url: jdbc:h2:mem:bankdb
+    #username: sa
+    #password: password
+
+    #for docker
+    # Syntax: ${VARIABLE_NAME:DEFAULT_VALUE}
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
@@ -16,5 +23,6 @@ spring:
   # This allows you to see the DB in your browser at http://localhost:8080/h2-console
   h2:
     console:
-      enabled: true
+      #enabled: true
+      enabled: ${SPRING_H2_CONSOLE_ENABLED:true} #for docker
       path: /h2-console

@@ -1,0 +1,19 @@
+services:
+  account-service:
+    build:
+      context: ./account-service   # Go into the subfolder[cite: 1, 2]
+      dockerfile: Dockerfile        # Look for the file inside that folder[cite: 1, 2]
+    container_name: account-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_H2_CONSOLE_ENABLED=true
+    networks:
+      - banking-network
+
+networks:
+  banking-network:
+    driver: bridge

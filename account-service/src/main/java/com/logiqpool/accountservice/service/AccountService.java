@@ -4,6 +4,7 @@ package com.logiqpool.accountservice.service;
 import com.logiqpool.accountservice.dto.AccountRequestDto;
 import com.logiqpool.accountservice.dto.AccountResponseDto;
 import com.logiqpool.accountservice.model.Account;
+import com.logiqpool.accountservice.model.AccountStatus;
 import com.logiqpool.accountservice.repository.AccountRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,9 @@ public class AccountService {
                 .accountNumber(generatedAccountNumber)
                 .accountHolderName(request.getAccountHolderName())
                 .balance(request.getBalance())
-                .currency(request.getCurrency() !=null ? request.getCurrency():"USD").build();
+                .currency(request.getCurrency() !=null ? request.getCurrency():"USD")
+                .status(AccountStatus.ACTIVE)
+                .build();
 
         // 3. Persist
         Account savedAccount = accountrepository.save(account);

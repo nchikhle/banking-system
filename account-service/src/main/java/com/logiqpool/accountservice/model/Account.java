@@ -38,4 +38,7 @@ public class Account {
     @Column(nullable = false)
     private String currency;
 
+    @Enumerated(EnumType.STRING)
+    private AccountStatus status = AccountStatus.ACTIVE; // Default to active for now
+
 }

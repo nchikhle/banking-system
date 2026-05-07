@@ -26,3 +26,6 @@ spring:
       #enabled: true
       enabled: ${SPRING_H2_CONSOLE_ENABLED:true} #for docker
       path: /h2-console
+      # Allow the console to be accessed via the web
+      settings:
+        web-allow-others: ${SPRING_H2_CONSOLE_SETTINGS_WEB-ALLOW-OTHERS:true}

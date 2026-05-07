@@ -2,7 +2,7 @@ spring:
   application:
     name: account-service
   datasource:
-    driverClassName: org.h2.Driver
+
     #url: jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1 # Keeps data alive as long as the app runs
     #url: jdbc:h2:mem:bankdb
     #username: sa
@@ -10,17 +10,29 @@ spring:
 
     #for docker
     # Syntax: ${VARIABLE_NAME:DEFAULT_VALUE}
-    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1}
-    username: ${SPRING_DATASOURCE_USERNAME:sa}
-    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    # url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1}
+    # username: ${SPRING_DATASOURCE_USERNAME:sa}
+    # password: ${SPRING_DATASOURCE_PASSWORD:password}
 
+    # driverClassName: org.h2.Driver
+
+    # PostgreSQL Connection
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/accounts_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    driver-class: name=org.postgresql.Driver
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: update
     show-sql: true # Crucial: See the SQL generated for your transfers
+    properties:
+      hibernate:
+        dialect:  org.hibernate.dialect.PostgreSQLDialect
 
   # This allows you to see the DB in your browser at http://localhost:8080/h2-console
+
+  # JPA / Hibernate
   h2:
     console:
       #enabled: true

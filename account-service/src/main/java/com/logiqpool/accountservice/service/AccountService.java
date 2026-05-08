@@ -30,8 +30,9 @@ public class AccountService {
                 .accountNumber(generatedAccountNumber)
                 .accountHolderName(request.getAccountHolderName())
                 .balance(request.getBalance())
-                .currency(request.getCurrency() !=null ? request.getCurrency():"USD")
-                .status(AccountStatus.ACTIVE)
+                .accountType(request.getAccountType())
+                // .currency(request.getCurrency() !=null ? request.getCurrency():"USD")
+                // .status(AccountStatus.ACTIVE)
                 .build();
 
         // 3. Persist
@@ -48,10 +49,12 @@ public class AccountService {
                 .accountHolderName(account.getAccountHolderName())
                 .balance(account.getBalance())
                 .currency(account.getCurrency())
+                .accountType(account.getAccountType())
                 .build();
     }
 
-    //public Account getAccountById(String accountNumber){
-        //return accountrepository.findByAccountNumber(accountNumber).orElseThrow(()-> new RuntimeException("Account not found"));
-    //}
+    public Account getAccount(String accountNumber){
+        return accountrepository.findByAccountNumber(accountNumber)
+                .orElseThrow(()-> new RuntimeException("Account not found"));
+    }
 }

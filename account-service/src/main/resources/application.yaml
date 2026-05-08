@@ -41,3 +41,11 @@ spring:
       # Allow the console to be accessed via the web
       settings:
         web-allow-others: ${SPRING_H2_CONSOLE_SETTINGS_WEB-ALLOW-OTHERS:true}
+
+# 1. Stop ignoring "nama" and start complaining about it
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
+  # 2. Make sure Enums are handled strictly
+      read-unknown-enum-values-as-null: false

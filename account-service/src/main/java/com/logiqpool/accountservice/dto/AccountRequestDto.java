@@ -4,7 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
-
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.logiqpool.accountservice.model.AccountType;
 /***
  * A Security & Logic Note: The client should never send the accountNumber when creating an account. The bank's system generates that. If you let the user provide it, they could guess existing numbers or break your internal sequencing.
  *
@@ -19,11 +20,12 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder // Useful for creating objects in tests
+//@JsonIgnoreProperties(ignoreUnknown = false)
 public class AccountRequestDto {
 
     //@Column(unique = true, nullable = false, length = 20)
 
-    private String accountNumber;
+    //private String accountNumber;
 
     //@Column(nullable = false)
     @NotBlank(message ="Account holder name is required")
@@ -37,5 +39,8 @@ public class AccountRequestDto {
    // @Column(nullable = false)
     @Size(min = 3,max = 3, message = "Currency must be a 3-letter ISO code")
     private String currency; //e.g "USD
+
+    @NotNull
+    private AccountType accountType; // "SAVINGS" or "CHECKING"
 
 }

@@ -26,7 +26,7 @@ public class TransactionService {
         // 1. VALIDATE: Call Account Service via Feign
         AccountResponseDto fromAccount = accountClient.getAccount(request.getFromAccountNumber());
         log.info("fromAccount: {}",fromAccount);
-        log.info("fromAccount.getAccountHolderName(): {}",fromAccount.getAccountHolderName());
+        log.info("fromAccount.getAccountHolderName(): {}",fromAccount.accountHolderName());
         /* if (fromAccount.getBalance().compareTo(request.getAmount()) < 0) {
             throw new RuntimeException("Sender does not have enough balance");
         }

@@ -45,6 +45,6 @@ spring:
       read-unknown-enum-values-as-null: false
 account:
   service:
-    url: http://localhost:8081
+    url: http://localhost:8080
 server:
   port: 8082

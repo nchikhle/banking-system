@@ -9,7 +9,8 @@ import com.logiqpool.transactionservice.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
 
 @Slf4j
 @Service
@@ -18,35 +19,68 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final AccountClient accountClient; // Your Feign Client
-    // private final OutboxRepository outboxRepository;
+    private final TransactionInternalService internalService;
 
-    @Transactional // CRITICAL: Ensures both the Transaction and Outbox save or both fail
+    // @Transactional // CRITICAL: Ensures both the Transaction and Outbox save or both fail
     public void processTransfer(TransferRequest request) {
-        
-        // 1. VALIDATE: Call Account Service via Feign
-        AccountResponseDto fromAccount = accountClient.getAccount(request.getFromAccountNumber());
-        log.info("fromAccount: {}",fromAccount);
-        log.info("fromAccount.getAccountHolderName(): {}",fromAccount.accountHolderName());
-        /* if (fromAccount.getBalance().compareTo(request.getAmount()) < 0) {
-            throw new RuntimeException("Sender does not have enough balance");
+
+        // This is handled by your InternalService to ensure a fresh transaction context
+        // STEP 1: Save intent to DB (PENDING status + Unique Reference) (Handled in its own TX via REQUIRES_NEW)
+        Transaction tx = internalService.startTransaction(request);
+
+        // This key ensures Account Service doesn't double-charge
+        String idempotencyKey = "TX-" + tx.getId();
+
+        try {
+            // 1. VALIDATE: Call Account Service via Feign
+            AccountResponseDto fromAccount = accountClient.getAccount(request.fromAccountNumber());
+            BigDecimal amount = request.amount();
+            log.info("fromAccount: {}", fromAccount);
+            //log.info("fromAccount.getAccountHolderName(): {}", fromAccount.accountHolderName());
+
+            if (fromAccount.balance().compareTo(amount) < 0) {
+                internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "Insufficient Funds");
+                throw new RuntimeException("Insufficient Funds");
+            }
+
+            // 2. THE MONEY MOVE (Network calls to Account Service)
+            try {
+                // DEBIT step
+                // Now the Account Service can see this key and handle it
+                accountClient.updateBalance(fromAccount.accountNumber(), amount.negate(), idempotencyKey+ "-DEBIT"); // Debit
+
+                try {
+                    // CREDIT step
+                    //if(true) throw new RuntimeException("Network Timeout - Credit Failed!");
+                    accountClient.updateBalance(request.toAccountNumber(), amount, idempotencyKey+ "-CREDIT"); //Credit
+                } catch (Exception e) {
+                    log.error("Credit failed for {}, initiating refund", tx.getId());
+
+                    // COMPENSATING TRANSACTION (The Refund)
+                    // We use a specific suffix so the Account Service knows this is a refund
+                    accountClient.updateBalance(fromAccount.accountNumber(), amount, idempotencyKey+ "-REFUND"); // Credit back
+
+                    //finalizeTransaction(tx, TransactionStatus.FAILED, "Credit failed - Money Refunded");
+                    internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "Credit failed - Money Refunded");
+                    // throw new TransferFailedException("System error, money returned.");
+                    throw new RuntimeException("System error during credit, money returned.");
+                }
+            } catch (Exception e) {
+                // Handle global failure
+                // If the Debit itself failed or the refund logic threw an error
+                log.error("Debit/Transfer failed: {}", e.getMessage());
+                internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, e.getMessage());
+                throw e;
+            }
+
+            // 3. SUCCESS: Update the original transaction record
+            // 3. SUCCESS
+            internalService.finalizeStatus(tx.getId(), TransactionStatus.SUCCESS, "Completed successfully");
+            // TODO: logAudit(tx, "SUCCESS", "Transfer completed");
+
+        } catch (Exception e) {
+            log.error("Transfer process terminated for {}: {}", tx.getId(), e.getMessage());
+            throw e;
         }
-
-        // 2. RECORD: Save the transaction as PENDING
-        Transaction transaction = new Transaction();
-        transaction.setFromAccount(request.getFromAccountNumber());
-        transaction.setToAccount(request.getToAccountNumber());
-        transaction.setAmount(request.getAmount());
-        transaction.setTransactionStatus(TransactionStatus.valueOf("PENDING"));
-        transactionRepository.save(transaction);
-
-        // 3. OUTBOX: Save the event that needs to go to Kafka
-        // This is the "Outbox Pattern"
-        OutboxEvent event = new OutboxEvent();
-        event.setAggregateId(transaction.getId().toString());
-        event.setType("TRANSFER_INITIATED");
-        event.setPayload(serializeToJson(request)); // Helper to convert DTO to String
-        outboxRepository.save(event);*/
-        
-        // When this method ends, @Transactional commits both to the DB.
     }
 }

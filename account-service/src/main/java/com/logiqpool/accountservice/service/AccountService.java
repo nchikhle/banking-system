@@ -77,6 +77,36 @@ public class AccountService {
         return mapToResponseDto(accountRepository.save(account));
     }
 
+    @Transactional
+    public void processBalanceChange(String accNum, BigDecimal amount, String key) {
+
+        // 1. IDEMPOTENCY CHECK
+        // Check for Idempotency first (Have we already processed this TX-ID?)
+        // If the network failed previously but the DB actually finished,
+        // the Transaction Service will retry with the same ID.
+        if (accountRepository.existsByLastProcessedTxId(key)) {
+            return; // Already done, return success
+        }
+
+        // 2. TOMIC WITHDRAWAL
+        // Perform Atomic Update
+        // This query returns the number of rows updated.
+        int rowsUpdated = accountRepository.subtractBalanceIfPossible(accNum, amount.abs());
+
+        // 3. ERROR HANDLING
+        // If amount is negative (debit) and no rows were updated,
+        // it means the 'amount >= balance' check failed.
+        if (amount.compareTo(BigDecimal.ZERO) < 0 && rowsUpdated == 0) {
+            //throw new InsufficientFundsException("INSUFFICIENT_FUNDS: Required " + amount.abs());
+            throw new RuntimeException("INSUFFICIENT_FUNDS: Required " + amount.abs());
+        }
+
+        // 4. COMMIT THE MEMORY
+        // We save the TX-ID so that Step 1 catches any future retries
+        // Record the key to prevent double-processing
+        accountRepository.updateLastTxId(accNum, key);
+    }
+
     private AccountResponseDto mapToResponseDto(Account account) {
         return AccountResponseDto.builder()
                 .accountNumber(account.getAccountNumber()) // Critical for Transaction Service

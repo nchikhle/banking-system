@@ -47,11 +47,10 @@ public class AccountController {
      * This endpoint will be called by your Transaction Service (via Feign)
      * to adjust balances during a transfer.
      */
-    @PutMapping("/{accountNumber}/balance")
+    @PutMapping("/{accountNumber}/update-balance")
     public ResponseEntity<AccountResponseDto> updateBalance(@PathVariable String accountNumber,
                                                             @RequestParam BigDecimal amount){
         log.info("REST request to update balance for: {}", accountNumber);
         return ResponseEntity.ok(accountService.updateBalance(accountNumber, amount));
-
     }
 }

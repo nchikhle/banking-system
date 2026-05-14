@@ -19,6 +19,7 @@ public class TransactionInternalService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Transaction startTransaction(TransferRequest req) {
         Transaction tx = new Transaction();
+        tx.setTransactionReference(req.transactionReference());
         tx.setFromAccount(req.fromAccountNumber());
         tx.setToAccount(req.toAccountNumber());
         tx.setAmount(req.amount());

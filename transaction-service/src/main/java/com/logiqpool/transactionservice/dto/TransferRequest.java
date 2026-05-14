@@ -9,4 +9,5 @@ public record TransferRequest(
         String fromAccountNumber,
         String toAccountNumber,
         TransactionStatus transactionStatus,
-        BigDecimal amount){ }
+        BigDecimal amount,
+        String transactionReference){ }

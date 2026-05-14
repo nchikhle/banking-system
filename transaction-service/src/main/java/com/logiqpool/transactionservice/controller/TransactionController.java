@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/transactions")
+@RequestMapping("/api/v1/transactions")
 public class TransactionController {
 
     @Autowired
@@ -19,6 +19,6 @@ public class TransactionController {
     @PostMapping("/transfer")
     public ResponseEntity<String> transfer(@RequestBody TransferRequest request) {
         transactionService.processTransfer(request);
-        return ResponseEntity.accepted().body("Transfer request is being processed");
+        return ResponseEntity.accepted().body("Transfer request is processed successfully!");
     }
 }

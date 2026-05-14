@@ -6,11 +6,10 @@ services:
     container_name: account-service
     ports:
       - "8080:8080"
+      - "5005:5005"  # The debug port
     environment:
-      #- SPRING_DATASOURCE_URL=jdbc:h2:mem:bankdb;DB_CLOSE_DELAY=-1
-      #- SPRING_DATASOURCE_USERNAME=sa
-      #- SPRING_DATASOURCE_PASSWORD=password
-      #- SPRING_H2_CONSOLE_ENABLED=true
+      - SPRING_JPA_DATABASE=POSTGRESQL
+      - JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/accounts_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password

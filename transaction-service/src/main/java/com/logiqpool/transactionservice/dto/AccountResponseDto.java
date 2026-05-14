@@ -2,9 +2,7 @@ package com.logiqpool.transactionservice.dto;
 
 import com.logiqpool.transactionservice.model.AccountType;
 import lombok.Builder;
-
 import java.math.BigDecimal;
-
 
 @Builder // You can still keep @Builder for easy object creation
 public record AccountResponseDto(
@@ -14,4 +12,3 @@ public record AccountResponseDto(
     String currency,
     AccountType accountType
 ){}
-

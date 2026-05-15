@@ -1,16 +1,16 @@
 package com.logiqpool.transactionservice.service;
 
 import com.logiqpool.transactionservice.client.AccountClient;
-import com.logiqpool.transactionservice.dto.AccountResponseDto;
 import com.logiqpool.transactionservice.dto.TransferRequest;
+import com.logiqpool.transactionservice.exception.AccountServiceIntegrationException;
+import com.logiqpool.transactionservice.exception.InvalidTransactionException;
 import com.logiqpool.transactionservice.model.Transaction;
 import com.logiqpool.transactionservice.model.TransactionStatus;
 import com.logiqpool.transactionservice.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
 
 @Slf4j
 @Service
@@ -29,6 +29,14 @@ public class TransactionService {
 
     // @Transactional // CRITICAL: Ensures both the Transaction and Outbox save or both fail
     public void processTransfer(TransferRequest request) {
+
+        // Business Rule validation check before touching the DB
+        if (request.fromAccountNumber().equals(request.toAccountNumber())) {
+            throw new InvalidTransactionException("Source and destination account numbers cannot be identical.");
+        }
+        if (request.amount().signum() <= 0) {
+            throw new InvalidTransactionException("Transfer amount must be greater than zero.");
+        }
 
         // 1. Initialize PENDING record (Handled in its own TX via REQUIRES_NEW)
         // This is handled by your InternalService to ensure a fresh transaction context
@@ -65,8 +73,8 @@ public class TransactionService {
                     internalService.finalizeStatus(tx.getId(), TransactionStatus.SUCCESS, "Completed successfully");
                     log.info("Transfer completed successfully: {}", tx.getId());
 
-                } catch (Exception e) {
-                    log.error("Credit failed for {}, initiating immediate refund", tx.getId());
+                } catch (AccountServiceIntegrationException e) {
+                    log.error("Credit step failed for TX: {}, initiating compensation refund. Reason: {}", tx.getId(), e.getMessage());
 
                     // STEP C: COMPENSATION (The Refund)
                     // We use a specific suffix so the Account Service knows this is a refund
@@ -80,24 +88,29 @@ public class TransactionService {
                         internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "Credit failed - Money Refunded");
                     } catch (Exception refundError) {
                         // CRITICAL: The Debit happened, the Credit failed, AND the Refund failed.
-                        log.error("CRITICAL ERROR: Refund failed for {}! Data is inconsistent.", tx.getId());
-                        internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "STUCK: Refund failed. Manual check required.");
+                        log.error("CRITICAL DATA INCONSISTENCY: Refund failed for TX: {}! Manual intervention required.", tx.getId(), refundError);
+                        internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "CRITICAL: Refund failed. System out of sync.");
                     }
-                    throw new RuntimeException("Transfer failed during credit step: " + e.getMessage());
+                    throw e; // Rethrow integration exception for Controller handling
                 }
 
             //if(true) throw new RuntimeException("Network Timeout - Transaction service is failed!");
-            } catch (Exception e) {
+            } catch (AccountServiceIntegrationException e) {
+                // Initial DEBIT failed (e.g., 404 Account Not Found or 422 Insufficient Funds)
                 // If the initial DEBIT failed, we just mark the whole thing as FAILED.
                 // No refund is needed because no money ever moved.
-                log.error("Debit step failed: {}", e.getMessage());
+
+                log.error("Debit step failed for TX {}: {}", tx.getId(), e.getMessage());
                 internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, e.getMessage());
                 throw e;
             }
         } catch(Exception e) {
-            log.error("Transfer process terminated for {}: {}", tx.getId(), e.getMessage());
-            // We re-throw so the Controller can return the appropriate Error Response
-            throw e;
+            //log.error("Transfer process terminated for {}: {}", tx.getId(), e.getMessage());
+            // Keep ONLY this catch-all block to safeguard against random infrastructure crashes
+            // (like Postgres dropping its connection mid-method execution)
+            log.error("Unexpected internal infrastructure failure during processing for TX {}: {}", tx.getId(), e.getMessage(), e);
+            internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "System error: " + e.getMessage());
+            throw new AccountServiceIntegrationException(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected processing failure: " + e.getMessage());
         }
     }
 }

@@ -33,6 +33,7 @@ public class Transaction {
     private String toAccount ;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_status")
     private TransactionStatus transactionStatus; // PENDING, SUCCESS, FAILED
 
     @Column(precision = 19, scale = 4)

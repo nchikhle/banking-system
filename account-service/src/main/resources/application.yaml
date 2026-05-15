@@ -3,17 +3,17 @@ spring:
     name: account-service
 
   datasource:
-    #url: jdbc:h2:mem:bankdb
     # Defaults to H2 for quick local 'mvn clean compile'
     # Docker will override this with: jdbc:postgresql://db:5432/accounts_db
+
     url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:accounts_db;DB_CLOSE_DELAY=-1}
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:password}
-    #driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+    #driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}//NR
 
   jpa:
     # Auto-detects the database type (H2 or POSTGRESQL)
-    database: ${SPRING_JPA_DATABASE:H2}
+    #database: ${SPRING_JPA_DATABASE:H2} #as we have dialect defined explicitly.
     hibernate:
       ddl-auto: update
 
@@ -26,14 +26,16 @@ spring:
         #This makes the console output much more readable, telling you exactly which Repository method triggered which SQL query.
         format_sql: true
         use_sql_comments: true
+        dialect: ${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT:org.hibernate.dialect.H2Dialect}
         # Dialect is usually auto-detected, but we can nudge it
-        #dialect: ${ç:org.hibernate.dialect.H2Dialect}
 
   # H2 Console - Only active when using H2
   h2:
     console:
       enabled: true
       path: /h2-console
+      # Allow the console to be accessed via the web
+
       settings:
         web-allow-others: true
 
@@ -43,7 +45,7 @@ spring:
       # 1. Stop ignoring "nama" and start complaining about it
       # If Transaction Service sends a field we don't recognize, CRASH (don't ignore)
       fail-on-unknown-properties: true
-      # 2. Make sure Enums are handled strictly
+
       # Enums must match exactly
       read-unknown-enum-values-as-null: false
 
@@ -51,6 +53,6 @@ spring:
 logging:
   level:
     root: INFO
-    com.yourpackage.accountservice: DEBUG
+    com.logiqpool.accountservice: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE # See the actual values being saved

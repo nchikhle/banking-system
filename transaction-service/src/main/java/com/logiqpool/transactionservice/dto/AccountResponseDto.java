@@ -1,17 +1,14 @@
 package com.logiqpool.transactionservice.dto;
 
 import com.logiqpool.transactionservice.model.AccountType;
-
-import lombok.*;
-
+import lombok.Builder;
 import java.math.BigDecimal;
 
-@Setter @Getter @Builder
-@NoArgsConstructor @AllArgsConstructor
-public class AccountResponseDto {
-    private String accountHolderName;
-    private BigDecimal balance;
-    private String currency;
-    private AccountType accountType;
-
-}
+@Builder // You can still keep @Builder for easy object creation
+public record AccountResponseDto(
+    String accountNumber,
+    String accountHolderName,
+    BigDecimal balance,
+    String currency,
+    AccountType accountType
+){}

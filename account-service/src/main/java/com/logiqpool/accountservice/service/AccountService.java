@@ -20,18 +20,11 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
 
-   /* public AccountService(AccountRepository accountRepository){
-        this.accountRepository=accountRepository;
-    }
-*/
    @Transactional
     public AccountResponseDto createAccount(AccountRequestDto request) {
         log.info("Creating account for: {}", request.accountHolderName());
 
-        // 1. Generate unique account number (Logic: simple random for now)
-        //String generatedAccountNumber ="ACC" + System.currentTimeMillis();
-
-        // Better unique ID for professional apps
+        // 1. Generate unique account number
         String generatedAccountNumber = "ACC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // 2. Map Dto to Entity
@@ -40,8 +33,6 @@ public class AccountService {
                 .accountHolderName(request.accountHolderName())
                 .balance(request.balance())
                 .accountType(request.accountType())
-                // .currency(request.getCurrency() !=null ? request.getCurrency():"USD")
-                // .status(AccountStatus.ACTIVE)
                 .build();
 
         // 3. Persist
@@ -54,7 +45,8 @@ public class AccountService {
     }
 
     public AccountResponseDto getAccount(String accountNumber){
-        return accountRepository.findByAccountNumber(accountNumber).map(this::mapToResponseDto)
+        return accountRepository.findByAccountNumber(accountNumber)
+                .map(this::mapToResponseDto)
                 .orElseThrow(()-> new RuntimeException("Account not found"));
     }
 
@@ -75,6 +67,33 @@ public class AccountService {
         //update balance
         account.setBalance(newBalance);
         return mapToResponseDto(accountRepository.save(account));
+    }
+
+    @Transactional
+    public void processBalanceChange(String accNum, BigDecimal amount, String key) {
+        // 1. IDEMPOTENCY CHECK
+        if (accountRepository.existsByLastProcessedTxId(key)) {
+            log.info("Key {} already processed. Skipping to prevent double-charging.", key);
+            return;
+        }
+
+        // 2. ATOMIC UPDATE
+        int rowsUpdated;
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            // Withdrawal: Check balance in the same SQL query
+            rowsUpdated = accountRepository.subtractBalanceIfPossible(accNum, amount.abs());
+        } else {
+            // Deposit: Regular update
+            rowsUpdated = accountRepository.addBalance(accNum, amount);
+        }
+
+        // 3. VALIDATION
+        if (rowsUpdated == 0) {
+            throw new RuntimeException("Update failed: Insufficient funds or account not found.");
+        }
+
+        // 4. PERSIST THE KEY
+        accountRepository.updateLastTxId(accNum, key);
     }
 
     private AccountResponseDto mapToResponseDto(Account account) {

@@ -46,6 +46,8 @@ public class Account {
 
     private LocalDateTime createdAt;
 
+    private String lastProcessedTxId;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

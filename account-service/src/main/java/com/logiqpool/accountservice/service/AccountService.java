@@ -3,6 +3,8 @@ package com.logiqpool.accountservice.service;
 
 import com.logiqpool.accountservice.dto.AccountRequestDto;
 import com.logiqpool.accountservice.dto.AccountResponseDto;
+import com.logiqpool.accountservice.exception.AccountNotFoundException;
+import com.logiqpool.accountservice.exception.InsufficientFundsException;
 import com.logiqpool.accountservice.model.Account;
 import com.logiqpool.accountservice.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
@@ -47,7 +49,7 @@ public class AccountService {
     public AccountResponseDto getAccount(String accountNumber){
         return accountRepository.findByAccountNumber(accountNumber)
                 .map(this::mapToResponseDto)
-                .orElseThrow(()-> new RuntimeException("Account not found"));
+                .orElseThrow(()-> new AccountNotFoundException(accountNumber));
     }
 
     @Transactional
@@ -56,7 +58,7 @@ public class AccountService {
 
         //get Account
         Account account = accountRepository.findByAccountNumber(accountNumber)
-                .orElseThrow(() -> new RuntimeException("Account not found"));
+                .orElseThrow(() -> new AccountNotFoundException(accountNumber));
 
         //validate for balance limit
         BigDecimal newBalance = account.getBalance().add(amount);
@@ -89,7 +91,7 @@ public class AccountService {
 
         // 3. VALIDATION
         if (rowsUpdated == 0) {
-            throw new RuntimeException("Update failed: Insufficient funds or account not found.");
+            throw new InsufficientFundsException("Update failed: Insufficient funds or account not found.");
         }
 
         // 4. PERSIST THE KEY

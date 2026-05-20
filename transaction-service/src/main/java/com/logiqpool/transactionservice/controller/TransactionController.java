@@ -17,8 +17,9 @@ public class TransactionController {
     private TransactionService transactionService;
 
     @PostMapping("/transfer")
-    public ResponseEntity<String> transfer(@RequestBody TransferRequest request) {
+    public ResponseEntity<Void> transfer(@RequestBody TransferRequest request) {
         transactionService.processTransfer(request);
-        return ResponseEntity.accepted().body("Transfer request is processed successfully!");
+        //return ResponseEntity.accepted().body("Transfer request is processed successfully!");
+        return ResponseEntity.ok().build();
     }
 }

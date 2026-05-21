@@ -49,6 +49,15 @@ spring:
       # Enums must match exactly
       read-unknown-enum-values-as-null: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 1. Tells the container exactly where to fetch verification certificates
+          jwk-set-uri: http://keycloak:8080/realms/banking-realm/protocol/openid-connect/certs
+          # 2. Tells Spring exactly what 'iss' text string to expect inside incoming tokens
+          issuer-uri: http://localhost:8080/realms/banking-realm
+
 # Logging configuration to track the Feign client handoff
 logging:
   level:
@@ -56,3 +65,6 @@ logging:
     com.logiqpool.accountservice: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE # See the actual values being saved
+
+server:
+  port: 8081

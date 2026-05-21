@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile        # Look for the file inside that folder[cite: 1, 2]
     container_name: account-service
     ports:
-      - "8080:8080"
+      - "8081:8081"
       - "5005:5005"  # The debug port
     environment:
       #- SPRING_JPA_DATABASE=POSTGRESQL
@@ -25,7 +25,7 @@ services:
     container_name: transaction-service
 
     ports:
-      - "8082:8080"
+      - "8082:8082"
     environment:
       #- SPRING_JPA_DATABASE=POSTGRESQL
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/transactions_db
@@ -33,7 +33,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=password
       - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
       # This is the "Magic" line: use the container name, not localhost
-      - ACCOUNT_SERVICE_URL=http://account-service:8080
+      - ACCOUNT_SERVICE_URL=http://account-service:8081
     networks:
       - banking-network
     depends_on:
@@ -56,6 +56,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    container_name: keycloak
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+        # ⚡ THE SPEED FIX: Tell Keycloak not to enforce or validate domain headers locally
+        # ⚡ THE ACTUAL FIXED HOSTNAME PAIR FOR LOCAL DEV:
+        # This forces Keycloak to use whatever domain the incoming browser sent (localhost/127.0.0.1),
+        # meaning it won't force-redirect your browser to the internal docker-network addresses!
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+      KC_HTTP_ENABLED: "true"
+      # FORCE Keycloak to issue tokens with "iss": "http://keycloak:8080"
+      #KC_HOSTNAME_URL: http://keycloak:8080
+
+      # Keep the Java entropy speed booster active
+      JAVA_OPTS_APPEND: "-Djava.security.egd=file:/dev/./urandom"
+    volumes:
+      - ./keycloak_data:/opt/keycloak/data
+    command: start-dev
+    networks:
+      - banking-network              # ◀ Join the network
 
 networks:
   banking-network:

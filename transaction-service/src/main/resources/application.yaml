@@ -48,7 +48,18 @@ spring:
       # Enums must match exactly
       read-unknown-enum-values-as-null: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+            # 1. Tells the container exactly where to fetch verification certificates
+            jwk-set-uri: http://keycloak:8080/realms/banking-realm/protocol/openid-connect/certs
+            # 2. Tells Spring exactly what 'iss' text string to expect inside incoming tokens
+            # Replace with your Auth Server URI
+            issuer-uri: http://localhost:8080/realms/banking-realm
+
+
 account:
   service:
-    url: ${ACCOUNT_SERVICE_URL:http://localhost:8080} # Default for local dev
+    url: ${ACCOUNT_SERVICE_URL:http://localhost:8081} # Default for local dev
 

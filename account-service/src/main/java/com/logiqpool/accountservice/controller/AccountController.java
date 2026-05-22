@@ -57,4 +57,12 @@ public class AccountController {
         accountService.processBalanceChange(accountNumber, amount, key);
         return ResponseEntity.ok().build();
     }
+
+    // 🚀 The Verification Endpoint for the Scheduler
+    @GetMapping("/transactions/status")
+    public ResponseEntity<Boolean> checkTransactionStatus(@RequestParam("key") String idempotencyKey) {
+        log.info("Received external verification request for key: {}", idempotencyKey);
+        boolean status = accountService.verifyTransactionStatus(idempotencyKey);
+        return ResponseEntity.ok(status);
+    }
 }

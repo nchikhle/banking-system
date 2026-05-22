@@ -21,4 +21,8 @@ public interface AccountClient {
                        @RequestHeader("X-Idempotency-Key") String key // This is the missing piece!
     );
 
+    // 🚀 Maps directly to the new verification endpoint
+    @GetMapping("/api/v1/accounts/transactions/status")
+    boolean checkTransactionStatus(@RequestParam("key") String idempotencyKey);
+
 }

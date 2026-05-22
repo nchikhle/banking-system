@@ -21,10 +21,14 @@ public class TransactionCleanupScheduler {
 
     @Scheduled(fixedDelay = 600000) // Runs every 10 minutes
     public void reconcile() {
+        log.info("Executing Distributed Audit Reconciliation Loop...");
         // Find transactions that stayed PENDING (System crash) or FAILED (Partial failure/Network error)
 
         // Define the "cutoff" point (e.g., 10 minutes ago)
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        //LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+
+        // 🎯 CRITICAL FIX: Look back from creation time so stuck records are never lost
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
 
         // Statuses we are worried about
         List<TransactionStatus> targetStatuses = List.of(
@@ -38,7 +42,11 @@ public class TransactionCleanupScheduler {
                 threshold
         );
 
-        log.info("Found {} transactions requiring reconciliation", problematicTxs.size());
+        if (problematicTxs.isEmpty()) {
+            return;
+        }
+
+        log.info("Found {} transactions requiring alignment. Healing starting...", problematicTxs.size());
 
 //        for (Transaction tx : problematicTxs) {
 //            String baseKey = "TX-" + tx.getId();

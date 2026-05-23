@@ -44,58 +44,20 @@ public class TransactionService {
         Transaction tx = internalService.startTransaction(request);
 
         // This key ensures Account Service doesn't double-charge
-        String idempotencyKey = "TX-" + tx.getId();
+        String idempotencyKey = "TX-" + tx.getId().toString();
 
         try {
             // 2. THE MONEY MOVE (Network calls to Account Service)
-            log.info("Starting transfer for TX: {}", tx.getId());
+            log.info("Starting transfer execution sequence for TX: {}", tx.getId());
 
+            // STEP A: DEBIT
             try {
-                // STEP A: DEBIT
                 accountClient.updateBalance(
                         request.fromAccountNumber(),
                         request.amount().negate(),
                         idempotencyKey + "-DEBIT"
                 );
-
-                try {
-                    // STEP B: CREDIT
-                    // For testing failure, uncomment the line below:
-                    // if(true) throw new RuntimeException("Network Timeout during Credit!");
-
-                    accountClient.updateBalance(
-                            request.toAccountNumber(),
-                            request.amount(),
-                            idempotencyKey + "-CREDIT"
-                    );
-
-                    // 3. SUCCESS: Finalize the transaction
-                    internalService.finalizeStatus(tx.getId(), TransactionStatus.SUCCESS, "Completed successfully");
-                    log.info("Transfer completed successfully: {}", tx.getId());
-
-                } catch (AccountServiceIntegrationException e) {
-                    log.error("Credit step failed for TX: {}, initiating compensation refund. Reason: {}", tx.getId(), e.getMessage());
-
-                    // STEP C: COMPENSATION (The Refund)
-                    // We use a specific suffix so the Account Service knows this is a refund
-                    try {
-                        accountClient.updateBalance(
-                                request.fromAccountNumber(),
-                                request.amount(),
-                                idempotencyKey + "-REFUND"
-                        );
-
-                        internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "Credit failed - Money Refunded");
-                    } catch (Exception refundError) {
-                        // CRITICAL: The Debit happened, the Credit failed, AND the Refund failed.
-                        log.error("CRITICAL DATA INCONSISTENCY: Refund failed for TX: {}! Manual intervention required.", tx.getId(), refundError);
-                        internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "CRITICAL: Refund failed. System out of sync.");
-                    }
-                    throw e; // Rethrow integration exception for Controller handling
-                }
-
-            //if(true) throw new RuntimeException("Network Timeout - Transaction service is failed!");
-            } catch (AccountServiceIntegrationException e) {
+            } catch (Exception e) { // 🎯 FIX: Catch all exceptions to avoid missing errors
                 // Initial DEBIT failed (e.g., 404 Account Not Found or 422 Insufficient Funds)
                 // If the initial DEBIT failed, we just mark the whole thing as FAILED.
                 // No refund is needed because no money ever moved.
@@ -104,13 +66,66 @@ public class TransactionService {
                 internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, e.getMessage());
                 throw e;
             }
+
+            // STEP B: CREDIT
+            try {
+                // For testing failure, uncomment the line below:
+                // if(true) throw new RuntimeException("Network Timeout during Credit!");
+
+                accountClient.updateBalance(
+                        request.toAccountNumber(),
+                        request.amount(),
+                        idempotencyKey + "-CREDIT"
+                );
+
+                // 3. SUCCESS: Finalize the transaction
+                internalService.finalizeStatus(tx.getId(), TransactionStatus.SUCCESS, "Completed successfully");
+                log.info("Transfer completed successfully: {}", tx.getId());
+
+            } catch (Exception e) { // 🎯 FIX: Catch all exceptions to guarantee compensation runs
+                // STEP C: COMPENSATION (The Refund)
+                // We use a specific suffix so the Account Service knows this is a refund
+
+                log.error("Credit step failed for TX {}: {}" , tx.getId(), e.getMessage());
+                log.info("initiating compensation refund profile. Reason: {}", tx.getId());
+                handleImmediateRefund(request, idempotencyKey, tx);
+
+                throw e; // Rethrow integration exception for Controller handling
+            }
+
+            //if(true) throw new RuntimeException("Network Timeout - Transaction service is failed!");
+            
         } catch(Exception e) {
-            //log.error("Transfer process terminated for {}: {}", tx.getId(), e.getMessage());
+            // 🎯 FIX: If it's a known business/integration exception, pass it through without touching DB state
+            if (e instanceof AccountServiceIntegrationException || e instanceof InvalidTransactionException) {
+                throw e;
+            }
+
             // Keep ONLY this catch-all block to safeguard against random infrastructure crashes
-            // (like Postgres dropping its connection mid-method execution)
-            log.error("Unexpected internal infrastructure failure during processing for TX {}: {}", tx.getId(), e.getMessage(), e);
+            // such as Postgres dropping its connection mid-method execution
+            // Fallback safeguards ONLY against random core infrastructure failures (e.g. Postgres pool death mid-execution)
+
+            log.error("Transfer process terminated:: Unexpected internal infrastructure failure during processing for TX {}: {}", tx.getId(), e.getMessage());
             internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "System error: " + e.getMessage());
             throw new AccountServiceIntegrationException(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected processing failure: " + e.getMessage());
+        }
+    }
+
+    private void handleImmediateRefund(TransferRequest request, String idempotencyKey, Transaction tx) {
+        try {
+            accountClient.updateBalance(
+                    request.fromAccountNumber(),
+                    request.amount(),
+                    idempotencyKey + "-REFUND"
+            );
+
+            internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "Credit failed - Money Refunded");
+
+        } catch (Exception refundError) {
+            // CRITICAL: The Debit happened, the Credit failed, AND the Refund failed.
+
+            log.error("CRITICAL DATA INCONSISTENCY: Refund failed for TX: {}! Manual intervention required.", tx.getId(), refundError);
+            internalService.finalizeStatus(tx.getId(), TransactionStatus.FAILED, "CRITICAL: Refund failed. System out of sync.");
         }
     }
 }

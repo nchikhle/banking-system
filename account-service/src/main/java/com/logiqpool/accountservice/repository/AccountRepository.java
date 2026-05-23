@@ -14,25 +14,47 @@ import java.util.UUID;
 public interface AccountRepository  extends JpaRepository<Account , UUID> {
     Optional<Account> findByAccountNumber(String accountNumber);
 
+    boolean existsByAccountNumber(String accountNumber);
+        // Check if we've seen this TX-ID before
+    boolean existsByLastProcessedTxId(String key);
+
     // Atomic update to prevent race conditions
     @Modifying
     @Query("UPDATE Account a SET a.balance = a.balance - :amount " +
             "WHERE a.accountNumber = :accNum AND a.balance >= :amount")
     int subtractBalanceIfPossible(String accNum, BigDecimal amount);
 
+    @Modifying
+    @Transactional
+    @Query("UPDATE Account a SET a.balance = a.balance + :amount WHERE a.accountNumber = :accNum")
+    int addBalance( String accNum, BigDecimal amount);
+
     // Update the "Memory" of the account
     @Modifying
     @Transactional
-    @Query("UPDATE Account a SET a.lastProcessedTxId = :txId WHERE a.accountNumber = :accNum")
-    void updateLastTxId(String accNum, String txId);
+    @Query("UPDATE Account a SET a.lastProcessedTxId = :key WHERE a.accountNumber = :accNum")
+    void updateLastTxId(String accNum, String key);
 
-    // Check if we've seen this TX-ID before
-   // boolean existsByLastProcessedTxId(String lastProcessedTxId);
+
+    /*Optional<Account> findByAccountNumber(String accountNumber);
+
+    boolean existsByAccountNumber(String accountNumber);
 
     boolean existsByLastProcessedTxId(String key);
 
     @Modifying
     @Transactional
+    @Query("UPDATE Account a SET a.balance = a.balance - :amount " +
+            "WHERE a.accountNumber = :accNum AND a.balance >= :amount")
+    int subtractBalanceIfPossible(@Param("accNum") String accNum, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Transactional
     @Query("UPDATE Account a SET a.balance = a.balance + :amount WHERE a.accountNumber = :accNum")
-    int addBalance( String accNum, BigDecimal amount);
+    int addBalance(@Param("accNum") String accNum, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Account a SET a.lastProcessedTxId = :key WHERE a.accountNumber = :accNum")
+    void updateLastTxId(@Param("accNum") String accNum, @Param("key") String key); // 🎯 FIX: Parameters perfectly aligned with JPQL named variables*/
 }

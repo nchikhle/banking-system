@@ -1,0 +1,55 @@
+name: Java CI with Maven & Postgres
+
+on:
+  push:
+    branches: [ main, master, develop, "feature/*" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    # Spin up an ephemeral Postgres instance for out-of-the-box DB connectivity
+    services:
+      postgres-db:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 🎯 FIXED: Bumped from @v4 to @v6 to leverage Node.js 24 runtime natively
+      - name: Checkout Codebase
+        uses: actions/checkout@v6
+
+      # 🎯 FIXED: Bumped from @v4 to @v5 to leverage Node.js 24 runtime natively
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # Automatically provision accounts_db and transactions_db inside the runner using your init.sql
+      - name: Initialize Ephemeral Databases
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -f init.sql
+
+      # Compiles code, runs existing unit tests, but won't crash if zero tests are found
+      - name: Build & Validate Account Service
+        run: |
+          cd account-service
+          ./mvnw clean verify -DfailIfNoTests=false
+
+      # Compiles code, checks annotations/Lombok dependencies, and validates models
+      - name: Build & Validate Transaction Service
+        run: |
+          cd transaction-service
+          ./mvnw clean verify -DfailIfNoTests=false

@@ -28,10 +28,10 @@ public class TransactionInternalService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void finalizeStatus(UUID id, TransactionStatus status, String reason) {
+    public void finalizeStatus(UUID id, TransactionStatus status, String remark) {
         repository.findById(id).ifPresent(tx -> {
             tx.setTransactionStatus(status);
-            tx.setFailureReason(reason); // Add this field to your Entity
+            tx.setRemarks(remark); // Add this field to your Entity
             repository.save(tx);
         });
     }

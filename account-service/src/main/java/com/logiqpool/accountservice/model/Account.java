@@ -46,7 +46,7 @@ public class Account {
 
     private LocalDateTime createdAt;
 
-    private String lastProcessedTxId;
+    private String lastProcessedTxId; //idempotency key
 
     @PrePersist
     protected void onCreate() {

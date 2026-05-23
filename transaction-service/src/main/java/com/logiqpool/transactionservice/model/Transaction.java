@@ -50,6 +50,7 @@ public class Transaction {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt; // When it last moved
 
-    @Column(name = "failure_reason", length = 1000) // ◀ Change 255 to 1000
-    private String failureReason;
+    @Column(name = "remarks", length = 1000) // ◀ Change 255 to 1000
+    private String remarks;
+
 }

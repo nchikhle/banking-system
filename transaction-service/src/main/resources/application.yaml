@@ -58,6 +58,16 @@ spring:
             # Replace with your Auth Server URI
             issuer-uri: http://localhost:8080/realms/banking-realm
 
+  # Logging configuration to track the Feign client handoff
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    root: INFO
+    com.logiqpool.accountservice: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE # See the actual values being saved
+
 
 account:
   service:

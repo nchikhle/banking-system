@@ -19,20 +19,22 @@ public class TransactionInternalService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Transaction startTransaction(TransferRequest req) {
         Transaction tx = new Transaction();
+
         tx.setTransactionReference(req.transactionReference());
         tx.setFromAccount(req.fromAccountNumber());
         tx.setToAccount(req.toAccountNumber());
         tx.setAmount(req.amount());
         tx.setTransactionStatus(TransactionStatus.PENDING);
+
         return repository.save(tx);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void finalizeStatus(UUID id, TransactionStatus status, String remark) {
-        repository.findById(id).ifPresent(tx -> {
-            tx.setTransactionStatus(status);
-            tx.setRemarks(remark); // Add this field to your Entity
-            repository.save(tx);
-        });
+        Transaction tx = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + id));
+
+        tx.setTransactionStatus(status);
+        tx.setRemarks(remark);
     }
 }

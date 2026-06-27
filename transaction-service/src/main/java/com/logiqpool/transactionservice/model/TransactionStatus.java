@@ -2,7 +2,11 @@ package com.logiqpool.transactionservice.model;
 
 public enum TransactionStatus {
         PENDING,
-        COMPLETED,
+        DEBITED,
+        SUCCESS,
         FAILED,
-        SUCCESS
+        COMPENSATION_PENDING,
+        COMPENSATED,
+        COMPENSATION_FAILED,
+        COMPLETED
     }

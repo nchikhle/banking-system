@@ -34,6 +34,7 @@ public class AccountService {
                 .accountNumber(generatedAccountNumber)
                 .accountHolderName(request.accountHolderName())
                 .balance(request.balance())
+                .currency(request.currency().toUpperCase())
                 .accountType(request.accountType())
                 .build();
 
@@ -46,11 +47,13 @@ public class AccountService {
         //return "Account service logic executed";
     }
 
+    @Transactional(readOnly = true)
     public AccountResponseDto getAccount(String accountNumber){
         return accountRepository.findByAccountNumber(accountNumber)
                 .map(this::mapToResponseDto)
                 .orElseThrow(()-> new AccountNotFoundException(accountNumber));
     }
+    //I use @Transactional(readOnly = true) for read operations because it avoids unnecessary dirty checking and clearly communicates that the method does not modify data.
 
     @Transactional
     public void processBalanceChange(String accNum, BigDecimal amount, String key) {
@@ -60,28 +63,10 @@ public class AccountService {
             return;
         }
 
-        // 2. 🎯 FIX: Explicit Profile Existence Verification Check
+        //Explicit Profile Existence Verification Check
         if (!accountRepository.existsByAccountNumber(accNum)) {
             throw new AccountNotFoundException(accNum);
         }
-        /**
-         * 🚨 Bug 2: Ambiguous Errors on Non-Existent Accounts
-         * Look closely at processBalanceChange inside your AccountService:
-         *
-         * Java
-         * rowsUpdated = accountRepository.subtractBalanceIfPossible(accNum, amount.abs());
-         * // ...
-         * if (rowsUpdated == 0) {
-         *     throw new InsufficientFundsException("Update failed: Insufficient funds or account not found."); // ◀ HERE
-         * }
-         * Why it's a problem:
-         * If your transaction-service calls updateBalance with a misspelled or completely non-existent account number, your custom @Modifying queries will update 0 rows.
-         * Your application will immediately throw an InsufficientFundsException, returning an HTTP 400 Bad Request via your handler.
-         *
-         * This completely tricks your orchestration service! The transaction-service will assume the account exists but just lacked funds, when in reality, the account was completely missing. It should have returned an HTTP 404 Not Found so the orchestrator knows never to try a compensation refund on a non-existent account.
-         *
-         * 🛠️ The Fix:
-         * Perform an explicit existence check before executing the balance changes. */
 
         // 2. ATOMIC UPDATE
         int rowsUpdated;
@@ -98,13 +83,38 @@ public class AccountService {
             throw new InsufficientFundsException("Transaction Rejected: Insufficient available funds for balance modification.");
         }
 
-        // 4. PERSIST THE KEY
-        accountRepository.updateLastTxId(accNum, key);
+        // 4. Persist idempotency key for demo-level duplicate protection.
+        // Production design should store all processed keys in a separate idempotency table.
+        int keyRowsUpdated = accountRepository.updateLastTxId(accNum, key);
+
+        if (keyRowsUpdated == 0) {
+            throw new IllegalStateException(
+                    "Failed to persist idempotency key for account: " + accNum
+            );
+        }
     }
 
     public boolean verifyTransactionStatus(String idempotencyKey) {
         log.info("Checking external processing status for key: {}", idempotencyKey);
         return accountRepository.existsByLastProcessedTxId(idempotencyKey);
+    }
+
+    @Transactional
+    public void withdrawWithPessimisticLock(String accountNumber, BigDecimal amount) {
+        // 1. Fetch account and lock the row immediately
+        Account account = accountRepository.findByAccountNumberWithLock(accountNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        // 2. Business validation
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new IllegalStateException("Insufficient funds");
+        }
+
+        // 3. Mutate data safely
+        account.setBalance(account.getBalance().subtract(amount));
+
+        // 4. Save changes (Lock is released automatically when @Transactional block ends)
+        accountRepository.save(account);
     }
 
     private AccountResponseDto mapToResponseDto(Account account) {

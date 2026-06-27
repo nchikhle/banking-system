@@ -34,6 +34,7 @@ public class AccountService {
                 .accountNumber(generatedAccountNumber)
                 .accountHolderName(request.accountHolderName())
                 .balance(request.balance())
+                .currency(request.currency().toUpperCase())
                 .accountType(request.accountType())
                 .build();
 
@@ -46,30 +47,13 @@ public class AccountService {
         //return "Account service logic executed";
     }
 
+    @Transactional(readOnly = true)
     public AccountResponseDto getAccount(String accountNumber){
         return accountRepository.findByAccountNumber(accountNumber)
                 .map(this::mapToResponseDto)
                 .orElseThrow(()-> new AccountNotFoundException(accountNumber));
     }
-
-    @Transactional
-    public AccountResponseDto updateBalance(String accountNumber, BigDecimal amount) {
-        log.info("Updating balance for account {}: {}", accountNumber, amount);
-
-        //get Account
-        Account account = accountRepository.findByAccountNumber(accountNumber)
-                .orElseThrow(() -> new AccountNotFoundException(accountNumber));
-
-        //validate for balance limit
-        BigDecimal newBalance = account.getBalance().add(amount);
-        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new RuntimeException("Insufficient funds in account: " + accountNumber);
-        }
-
-        //update balance
-        account.setBalance(newBalance);
-        return mapToResponseDto(accountRepository.save(account));
-    }
+    //I use @Transactional(readOnly = true) for read operations because it avoids unnecessary dirty checking and clearly communicates that the method does not modify data.
 
     @Transactional
     public void processBalanceChange(String accNum, BigDecimal amount, String key) {
@@ -77,6 +61,11 @@ public class AccountService {
         if (accountRepository.existsByLastProcessedTxId(key)) {
             log.info("Key {} already processed. Skipping to prevent double-charging.", key);
             return;
+        }
+
+        //Explicit Profile Existence Verification Check
+        if (!accountRepository.existsByAccountNumber(accNum)) {
+            throw new AccountNotFoundException(accNum);
         }
 
         // 2. ATOMIC UPDATE
@@ -91,11 +80,41 @@ public class AccountService {
 
         // 3. VALIDATION
         if (rowsUpdated == 0) {
-            throw new InsufficientFundsException("Update failed: Insufficient funds or account not found.");
+            throw new InsufficientFundsException("Transaction Rejected: Insufficient available funds for balance modification.");
         }
 
-        // 4. PERSIST THE KEY
-        accountRepository.updateLastTxId(accNum, key);
+        // 4. Persist idempotency key for demo-level duplicate protection.
+        // Production design should store all processed keys in a separate idempotency table.
+        int keyRowsUpdated = accountRepository.updateLastTxId(accNum, key);
+
+        if (keyRowsUpdated == 0) {
+            throw new IllegalStateException(
+                    "Failed to persist idempotency key for account: " + accNum
+            );
+        }
+    }
+
+    public boolean verifyTransactionStatus(String idempotencyKey) {
+        log.info("Checking external processing status for key: {}", idempotencyKey);
+        return accountRepository.existsByLastProcessedTxId(idempotencyKey);
+    }
+
+    @Transactional
+    public void withdrawWithPessimisticLock(String accountNumber, BigDecimal amount) {
+        // 1. Fetch account and lock the row immediately
+        Account account = accountRepository.findByAccountNumberWithLock(accountNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        // 2. Business validation
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new IllegalStateException("Insufficient funds");
+        }
+
+        // 3. Mutate data safely
+        account.setBalance(account.getBalance().subtract(amount));
+
+        // 4. Save changes (Lock is released automatically when @Transactional block ends)
+        accountRepository.save(account);
     }
 
     private AccountResponseDto mapToResponseDto(Account account) {
@@ -107,4 +126,6 @@ public class AccountService {
                 .accountType(account.getAccountType())
                 .build();
     }
+
+
 }

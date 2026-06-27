@@ -1,6 +1,7 @@
 package com.logiqpool.transactionservice.scheduler;
 
 import com.logiqpool.transactionservice.client.AccountClient;
+import com.logiqpool.transactionservice.dto.BalanceChangeRequestDto;
 import com.logiqpool.transactionservice.model.Transaction;
 import com.logiqpool.transactionservice.model.TransactionStatus;
 import com.logiqpool.transactionservice.repository.TransactionRepository;
@@ -16,71 +17,82 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class TransactionCleanupScheduler {
-    private final TransactionRepository repository;
+
+    private final TransactionRepository transactionRepository;
     private final AccountClient accountClient;
 
     @Scheduled(fixedDelay = 600000) // Runs every 10 minutes
     public void reconcile() {
-        // Find transactions that stayed PENDING (System crash) or FAILED (Partial failure/Network error)
+        log.info("Executing distributed audit reconciliation loop...");
 
-        // Define the "cutoff" point (e.g., 10 minutes ago)
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
 
-        // Statuses we are worried about
-        List<TransactionStatus> targetStatuses = List.of(
-                TransactionStatus.PENDING,
-                TransactionStatus.FAILED
-        );
+        List<Transaction> problematicTxs =
+                transactionRepository.findTransactionsToReconcile(threshold);
 
-        // Call the new repository method
-        List<Transaction> problematicTxs = repository.findAllByTransactionStatusInAndUpdatedAtBefore(
-                targetStatuses,
-                threshold
-        );
+        if (problematicTxs.isEmpty()) {
+            log.info("No transactions found for reconciliation.");
+            return;
+        }
 
-        log.info("Found {} transactions requiring reconciliation", problematicTxs.size());
+        log.info("Found {} transactions requiring reconciliation.", problematicTxs.size());
 
-//        for (Transaction tx : problematicTxs) {
-//            String baseKey = "TX-" + tx.getId();
-//            try {
-//                // Step 1: Query the Account Service for the specific keys
-//                boolean debitSuccess = accountClient.checkTransactionStatus(baseKey + "-DEBIT");
-//                boolean creditSuccess = accountClient.checkTransactionStatus(baseKey + "-CREDIT");
-//                boolean refundSuccess = accountClient.checkTransactionStatus(baseKey + "-REFUND");
-//
-//                // Step 2: Determine reality vs local database
-//                if (creditSuccess) {
-//                    // Case 1: Everything actually finished, but our DB didn't update
-//                    tx.setTransactionStatus(TransactionStatus.SUCCESS);
-//                    tx.setFailureReason("Recovered: Credit verified externally.");
-//                }
-//                else if (refundSuccess) {
-//                    // Case 2: The refund happened, we just didn't record the failure
-//                    tx.setTransactionStatus(TransactionStatus.FAILED);
-//                    tx.setFailureReason("Recovered: Refund verified externally.");
-//                }
-//                else if (debitSuccess) {
-//                    // Case 3: CRITICAL - Money was taken but never credited or refunded
-//                    log.warn("TX {} is stuck in Half-Debit state. Triggering auto-refund.", tx.getId());
-//                    accountClient.updateBalance(tx.getFromAccountNumber(), tx.getAmount(), baseKey + "-REFUND");
-//                    tx.setTransactionStatus(TransactionStatus.FAILED);
-//                    tx.setFailureReason("Recovered: Auto-refunded by Scheduler.");
-//                }
-//                else {
-//                    // Case 4: Nothing ever happened on the Account side
-//                    tx.setTransactionStatus(TransactionStatus.FAILED);
-//                    tx.setFailureReason("Recovered: No external activity found.");
-//                }
-//
-//                // Step 3: Save the final truth
-//                repository.save(tx);
-//                log.info("Successfully reconciled TX: {}", tx.getId());
-//
-//            } catch (Exception e) {
-//                log.error("Failed to reconcile TX: {}. Error: {}", tx.getId(), e.getMessage());
-//                // We don't throw here; let the next loop iteration or next run try again
-//            }
-//
-//        }
+        for (Transaction tx : problematicTxs) {
+            reconcileTransaction(tx);
+        }
+    }
+
+    private void reconcileTransaction(Transaction tx) {
+        String baseKey = "TX-" + tx.getId();
+
+        String debitKey = baseKey + "-DEBIT";
+        String creditKey = baseKey + "-CREDIT";
+        String refundKey = baseKey + "-REFUND";
+
+        try {
+            boolean debitSuccess = accountClient.checkTransactionStatus(debitKey).processed();
+            boolean creditSuccess = accountClient.checkTransactionStatus(creditKey).processed();
+            boolean refundSuccess = accountClient.checkTransactionStatus(refundKey).processed();
+
+            if (creditSuccess) {
+                tx.setTransactionStatus(TransactionStatus.SUCCESS);
+                tx.setRemarks("Recovered: Credit verified externally.");
+
+            } else if (refundSuccess) {
+                tx.setTransactionStatus(TransactionStatus.FAILED);
+                tx.setRemarks("Recovered: Refund verified externally.");
+
+            } else if (debitSuccess) {
+                log.warn("TX {} is stuck after debit. Retrying refund.", tx.getId());
+
+                accountClient.updateBalance(
+                        tx.getFromAccount(),
+                        refundKey,
+                        BalanceChangeRequestDto.builder()
+                                .amount(tx.getAmount())
+                                .build()
+                );
+
+                tx.setTransactionStatus(TransactionStatus.FAILED);
+                //tx.setRemarks("Recovered: Auto-refunded by scheduler.");
+                tx.setRemarks("Recovered: Debit was verified, credit/refund missing, auto-refunded by scheduler.");
+
+            } else {
+                tx.setTransactionStatus(TransactionStatus.FAILED);
+                tx.setRemarks("Recovered: No external account activity found.");
+            }
+
+            transactionRepository.save(tx);
+
+            log.info("Successfully reconciled TX: {}", tx.getId());
+
+        } catch (Exception e) {
+            log.error(
+                    "Failed to reconcile TX {}. It will be retried in the next scheduler run. Error: {}",
+                    tx.getId(),
+                    e.getMessage(),
+                    e
+            );
+        }
     }
 }

@@ -1,0 +1,31 @@
+# 🐋 Use a standard Docker image containing Java 21 and Maven
+image: maven:3.9.6-eclipse-temurin-17
+
+# 🗂️ Define the sequence of validation stages
+stages:
+  - build
+  - test
+
+# 💾 Cache dependencies so subsequent pipeline runs are incredibly fast
+cache:
+  paths:
+    - .m2/repository
+
+# 🏗️ Job 1: Test Compilation across both microservices
+compile_project:
+  stage: build
+  script:
+    - echo "Validating compilation for current scheduler and controller modifications..."
+    - mvn clean compile -Dmaven.repo.local=.m2/repository
+
+# 🧪 Job 2: Execute Unit & Integration Tests
+run_test_suites:
+  stage: test
+  script:
+    - echo "Executing JUnit test blocks against modified business logic..."
+    - mvn test -Dmaven.repo.local=.m2/repository
+  artifacts:
+    when: always
+    paths:
+      - "**/target/surefire-reports/"
+    expire_in: 7 days

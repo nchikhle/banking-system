@@ -6,9 +6,14 @@ import com.logiqpool.accountservice.dto.AccountResponseDto;
 import com.logiqpool.accountservice.exception.AccountNotFoundException;
 import com.logiqpool.accountservice.exception.InsufficientFundsException;
 import com.logiqpool.accountservice.model.Account;
+import com.logiqpool.accountservice.model.IdempotencyOperationType;
+import com.logiqpool.accountservice.model.IdempotencyRecord;
+import com.logiqpool.accountservice.model.IdempotencyStatus;
 import com.logiqpool.accountservice.repository.AccountRepository;
+import com.logiqpool.accountservice.repository.IdempotencyRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +26,7 @@ import java.util.UUID;
 public class AccountService {
 
     private final AccountRepository accountRepository;
+    private final IdempotencyRecordRepository idempotencyRecordRepository;
 
    @Transactional
     public AccountResponseDto createAccount(AccountRequestDto request) {
@@ -58,14 +64,32 @@ public class AccountService {
     @Transactional
     public void processBalanceChange(String accNum, BigDecimal amount, String key) {
         // 1. IDEMPOTENCY CHECK
-        if (accountRepository.existsByLastProcessedTxId(key)) {
+        /*if (accountRepository.existsByLastProcessedTxId(key)) {
             log.info("Key {} already processed. Skipping to prevent double-charging.", key);
             return;
-        }
+        }*/
+        validateBalanceChangeRequest(accNum, amount, key);
+
+
 
         //Explicit Profile Existence Verification Check
         if (!accountRepository.existsByAccountNumber(accNum)) {
             throw new AccountNotFoundException(accNum);
+        }
+
+        try {
+            idempotencyRecordRepository.saveAndFlush(
+                    IdempotencyRecord.builder()
+                            .idempotencyKey(key)
+                            .accountNumber(accNum)
+                            .amount(amount)
+                            .operationType(resolveOperationType(key, amount))
+                            .status(IdempotencyStatus.SUCCESS)
+                            .build()
+            );
+        } catch (DataIntegrityViolationException ex) {
+            log.info("Idempotency key {} already processed. Skipping duplicate request.", key);
+            return;
         }
 
         // 2. ATOMIC UPDATE
@@ -85,18 +109,21 @@ public class AccountService {
 
         // 4. Persist idempotency key for demo-level duplicate protection.
         // Production design should store all processed keys in a separate idempotency table.
-        int keyRowsUpdated = accountRepository.updateLastTxId(accNum, key);
+        //int keyRowsUpdated = accountRepository.updateLastTxId(accNum, key);
 
-        if (keyRowsUpdated == 0) {
-            throw new IllegalStateException(
-                    "Failed to persist idempotency key for account: " + accNum
-            );
-        }
+        log.info(
+                "Balance updated successfully for account {} with idempotency key {}",
+                accNum,
+                key
+        );
+        //TODO: ADD PREVIOUS CODE IN COMMENT
     }
 
+
+    @Transactional(readOnly = true)
     public boolean verifyTransactionStatus(String idempotencyKey) {
         log.info("Checking external processing status for key: {}", idempotencyKey);
-        return accountRepository.existsByLastProcessedTxId(idempotencyKey);
+        return idempotencyRecordRepository.existsByIdempotencyKey(idempotencyKey);
     }
 
     @Transactional
@@ -127,5 +154,50 @@ public class AccountService {
                 .build();
     }
 
+    private IdempotencyOperationType resolveOperationType(String key, BigDecimal amount) {
+        if (key != null && key.endsWith("-DEBIT")) {
+            return IdempotencyOperationType.DEBIT;
+        }
+
+        if (key != null && key.endsWith("-CREDIT")) {
+            return IdempotencyOperationType.CREDIT;
+        }
+
+        if (key != null && key.endsWith("-REFUND")) {
+            return IdempotencyOperationType.REFUND;
+        }
+
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) < 0) {
+            return IdempotencyOperationType.DEBIT;
+        }
+
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+            return IdempotencyOperationType.CREDIT;
+        }
+
+        return IdempotencyOperationType.UNKNOWN;
+    }
+    private void validateBalanceChangeRequest(String accountNumber, BigDecimal amount, String idempotencyKey) {
+
+        if (accountNumber == null || accountNumber.isBlank()) {
+            throw new IllegalArgumentException("Account number is required.");
+        }
+
+        if (amount == null) {
+            throw new IllegalArgumentException("Amount is required.");
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) == 0) {
+            throw new IllegalArgumentException("Amount cannot be zero.");
+        }
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("Idempotency key is required.");
+        }
+
+        if (idempotencyKey.length() > 100) {
+            throw new IllegalArgumentException("Idempotency key must not exceed 100 characters.");
+        }
+    }
 
 }

@@ -57,11 +57,12 @@
         private LocalDateTime updatedAt;
 
         /**
-         * Simplified idempotency tracking for demo purpose.
-         * Production design should use a separate transaction/idempotency table.
+         * Deprecated demo-only field.
+         * Real idempotency is now tracked in idempotency_records table.
          */
         @Column(length = 100)
         private String lastProcessedTxId;
+
 
         @PrePersist
         protected void onCreate() {

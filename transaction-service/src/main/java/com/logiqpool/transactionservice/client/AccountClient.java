@@ -19,7 +19,7 @@ public interface AccountClient {
             @PathVariable("accountNumber") String accountNumber
     );
 
-    @PatchMapping("/api/v1/accounts/{accountNumber}/balance")
+    @PatchMapping("/api/v1/accounts/{accountNumber}/update-balance")
     void updateBalance(
             @PathVariable("accountNumber") String accountNumber,
             @RequestHeader("X-Idempotency-Key") String key,

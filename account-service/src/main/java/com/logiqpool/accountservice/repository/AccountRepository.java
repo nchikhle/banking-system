@@ -22,7 +22,7 @@ public interface AccountRepository  extends JpaRepository<Account , UUID> {
      * Demo-only idempotency check.
      * Production should track all idempotency keys in a separate table.
      */
-    boolean existsByLastProcessedTxId(String key);
+    //boolean existsByLastProcessedTxId(String key);
 
     /**
      * Pessimistic lock version.
@@ -75,7 +75,7 @@ public interface AccountRepository  extends JpaRepository<Account , UUID> {
     /**
      * Simplified idempotency tracking.
      * Production version should use a separate transaction/idempotency table.
-     */
+
     @Modifying
     @Query("""
     UPDATE Account a
@@ -86,7 +86,7 @@ public interface AccountRepository  extends JpaRepository<Account , UUID> {
     int updateLastTxId(
             @Param("accNum") String accNum,
             @Param("key") String key
-    );
+    ); */
 }
 
 /***

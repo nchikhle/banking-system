@@ -26,10 +26,13 @@ public class TransactionController {
         log.info("Processing inbound transfer request. Reference: {}", request.transactionReference());
 
         transactionService.processTransfer(request);
-        //return ResponseEntity.accepted().body("Transfer request is processed successfully!");
+
         log.info("Transfer request completed successfully for Reference: {}", request.transactionReference());
+
         return ResponseEntity.ok().build();
     }
+
+
     // GET /{transactionId}/status
     // GET / {transactionId}
 }

@@ -6,6 +6,8 @@ public enum AuditEventType {
     ACCOUNT_UPDATED,
 
     TRANSFER_STARTED,
+    TRANSFER_SUCCESS,
+    TRANSFER_FAILED,
 
     DEBIT_SUCCESS,
     DEBIT_FAILED,

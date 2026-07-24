@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling // 🚀 MUST be present to fire up background schedulers!
-@EnableFeignClients
+@EnableFeignClients(basePackages = "com.logiqpool.transactionservice.client")
 public class TransactionServiceApplication {
 
 	public static void main(String[] args) {

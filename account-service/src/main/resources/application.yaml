@@ -70,3 +70,7 @@ logging:
 
 server:
   port: 8081
+
+audit:
+  service:
+    url: ${AUDIT_SERVICE_URL:http://localhost:8084} # Default for local dev

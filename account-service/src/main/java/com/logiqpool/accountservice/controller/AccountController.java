@@ -16,7 +16,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v2/accounts")
+@RequestMapping("/api/v1/accounts")
 @Slf4j
 @RequiredArgsConstructor
 @Validated

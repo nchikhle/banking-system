@@ -5,6 +5,12 @@ spring:
   application:
     name: transaction-service
 
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: true
+
   datasource:
     # Syntax: ${VARIABLE_NAME:DEFAULT_VALUE}
     # Defaults to H2 for quick local 'mvn clean compile'
@@ -73,3 +79,6 @@ account:
   service:
     url: ${ACCOUNT_SERVICE_URL:http://localhost:8081} # Default for local dev
 
+audit:
+  service:
+    url: ${AUDIT_SERVICE_URL:http://localhost:8084} # Default for local dev

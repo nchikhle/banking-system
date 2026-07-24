@@ -1,10 +1,14 @@
 package com.logiqpool.transactionservice.service;
 
 import com.logiqpool.transactionservice.client.AccountClient;
+import com.logiqpool.transactionservice.client.AuditClient;
+import com.logiqpool.transactionservice.dto.AuditEventRequestDto;
 import com.logiqpool.transactionservice.dto.BalanceChangeRequestDto;
 import com.logiqpool.transactionservice.dto.TransferRequest;
 import com.logiqpool.transactionservice.exception.AccountServiceIntegrationException;
 import com.logiqpool.transactionservice.exception.InvalidTransactionException;
+import com.logiqpool.transactionservice.model.AuditEventType;
+import com.logiqpool.transactionservice.model.AuditStatus;
 import com.logiqpool.transactionservice.model.Transaction;
 import com.logiqpool.transactionservice.model.TransactionStatus;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +22,7 @@ import org.springframework.stereotype.Service;
 public class TransactionService {
 
     private final AccountClient accountClient; // Your Feign Client
+    private final AuditClient auditClient;
     private final TransactionInternalService internalService;
 
     /**
@@ -49,8 +54,26 @@ public class TransactionService {
         // This key ensures Account Service doesn't double-charge
         String baseIdempotencyKey = "TX-" + tx.getId();
 
+        auditClient.createAuditEvent(
+                AuditEventRequestDto.builder()
+                        .correlationId(baseIdempotencyKey)
+                        .transactionReference(request.transactionReference())
+                        .accountNumber(request.fromAccountNumber())
+                        .serviceName("transaction-service")
+                        .eventType(AuditEventType.TRANSFER_STARTED)
+                        .status(AuditStatus.INFO)
+                        .remarks(
+                                "Transfer started from "
+                                        + request.fromAccountNumber()
+                                        + " to "
+                                        + request.toAccountNumber()
+                        )
+                        .build()
+        );
+
         try {
             // 2. THE MONEY MOVE (Network calls to Account Service)
+
             log.info("Starting transfer execution sequence for TX: {}", tx.getId());
 
             // STEP A: DEBIT
@@ -64,6 +87,23 @@ public class TransactionService {
                     tx.getId(),
                     TransactionStatus.SUCCESS,
                     "Completed successfully"
+            );
+            auditClient.createAuditEvent(
+                    AuditEventRequestDto.builder()
+                            .correlationId(baseIdempotencyKey)
+                            .transactionReference(request.transactionReference())
+                            .accountNumber(request.fromAccountNumber())
+                            .serviceName("transaction-service")
+                            .eventType(AuditEventType.TRANSFER_SUCCESS)
+                            .status(AuditStatus.SUCCESS)
+                            .remarks(
+                                    "Money Transfer from "
+                                            + request.fromAccountNumber()
+                                            + " to "
+                                            + request.toAccountNumber()
+                                            + " Completed successfully"
+                            )
+                            .build()
             );
 
             log.info("Transfer completed successfully: {}", tx.getId());
@@ -91,6 +131,20 @@ public class TransactionService {
                     tx.getId(),
                     TransactionStatus.FAILED,
                     "System error: " + e.getMessage());
+
+            auditClient.createAuditEvent(
+                    AuditEventRequestDto.builder()
+                            .correlationId(baseIdempotencyKey)
+                            .transactionReference(request.transactionReference())
+                            .accountNumber(request.fromAccountNumber())
+                            .serviceName("transaction-service")
+                            .eventType(AuditEventType.TRANSFER_FAILED)
+                            .status(AuditStatus.FAILED)
+                            .remarks(
+                                    "System error: " + e.getMessage()
+                            )
+                            .build()
+            );
 
             throw new AccountServiceIntegrationException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
@@ -170,8 +224,20 @@ public class TransactionService {
 
             internalService.finalizeStatus(
                     tx.getId(),
-                    TransactionStatus.FAILED,
+                    TransactionStatus.SUCCESS,
                     "Credit failed - Money Refunded"
+            );
+
+            auditClient.createAuditEvent(
+                    AuditEventRequestDto.builder()
+                            .correlationId("TX-" + tx.getId())
+                            .transactionReference(request.transactionReference())
+                            .accountNumber(request.fromAccountNumber())
+                            .serviceName("transaction-service")
+                            .eventType(AuditEventType.REFUND_SUCCESS)
+                            .status(AuditStatus.SUCCESS)
+                            .remarks("Credit failed - Money Refunded")
+                            .build()
             );
 
             log.info("Refund completed successfully for TX: {}", tx.getId());
@@ -190,6 +256,19 @@ public class TransactionService {
                     TransactionStatus.FAILED,
                     "CRITICAL: Refund failed. System out of sync."
             );
+
+            auditClient.createAuditEvent(
+                    AuditEventRequestDto.builder()
+                            .correlationId("TX-" + tx.getId())
+                            .transactionReference(request.transactionReference())
+                            .accountNumber(request.fromAccountNumber())
+                            .serviceName("transaction-service")
+                            .eventType(AuditEventType.REFUND_FAILED)
+                            .status(AuditStatus.FAILED)
+                            .remarks("CRITICAL: Refund failed. System out of sync.")
+                            .build()
+            );
+
         }
 
     }

@@ -1,7 +1,11 @@
 package com.logiqpool.transactionservice.scheduler;
 
 import com.logiqpool.transactionservice.client.AccountClient;
+import com.logiqpool.transactionservice.client.AuditClient;
+import com.logiqpool.transactionservice.dto.AuditEventRequestDto;
 import com.logiqpool.transactionservice.dto.BalanceChangeRequestDto;
+import com.logiqpool.transactionservice.model.AuditEventType;
+import com.logiqpool.transactionservice.model.AuditStatus;
 import com.logiqpool.transactionservice.model.Transaction;
 import com.logiqpool.transactionservice.model.TransactionStatus;
 import com.logiqpool.transactionservice.repository.TransactionRepository;
@@ -20,6 +24,7 @@ public class TransactionCleanupScheduler {
 
     private final TransactionRepository transactionRepository;
     private final AccountClient accountClient;
+    private final AuditClient auditClient;
 
     @Scheduled(fixedDelay = 600000) // Runs every 10 minutes
     public void reconcile() {
@@ -73,16 +78,30 @@ public class TransactionCleanupScheduler {
                                 .build()
                 );
 
-                tx.setTransactionStatus(TransactionStatus.FAILED);
+                tx.setTransactionStatus(TransactionStatus.SUCCESS);
                 //tx.setRemarks("Recovered: Auto-refunded by scheduler.");
                 tx.setRemarks("Recovered: Debit was verified, credit/refund missing, auto-refunded by scheduler.");
 
             } else {
                 tx.setTransactionStatus(TransactionStatus.FAILED);
                 tx.setRemarks("Recovered: No external account activity found.");
-            }
 
             transactionRepository.save(tx);
+
+                auditClient.createAuditEvent(
+                        AuditEventRequestDto.builder()
+                                .correlationId("TX-" + tx.getId())
+                                //.correlationId(refundKey)
+                                .transactionReference(tx.getTransactionReference())
+                                .accountNumber(tx.getFromAccount())
+                                .serviceName("transaction-service")
+                                .eventType(AuditEventType.SCHEDULER_RECOVERY)
+                                .status(tx.getTransactionStatus()==TransactionStatus.SUCCESS ?AuditStatus.SUCCESS: AuditStatus.FAILED)
+                                .remarks(tx.getRemarks())
+                                .build());
+            }
+
+
 
             log.info("Successfully reconciled TX: {}", tx.getId());
 

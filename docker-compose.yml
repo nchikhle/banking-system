@@ -14,6 +14,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
+      - AUDIT_SERVICE_URL=http://audit-service:8081
     depends_on:
       db:
         condition: service_healthy

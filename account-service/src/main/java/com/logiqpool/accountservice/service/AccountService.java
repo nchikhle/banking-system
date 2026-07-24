@@ -1,11 +1,15 @@
 package com.logiqpool.accountservice.service;
 
 
+import com.logiqpool.accountservice.client.AuditClient;
 import com.logiqpool.accountservice.dto.AccountRequestDto;
 import com.logiqpool.accountservice.dto.AccountResponseDto;
+import com.logiqpool.accountservice.dto.AuditEventRequestDto;
 import com.logiqpool.accountservice.exception.AccountNotFoundException;
 import com.logiqpool.accountservice.exception.InsufficientFundsException;
 import com.logiqpool.accountservice.model.Account;
+import com.logiqpool.accountservice.model.AuditEventType;
+import com.logiqpool.accountservice.model.AuditStatus;
 import com.logiqpool.accountservice.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +25,7 @@ import java.util.UUID;
 public class AccountService {
 
     private final AccountRepository accountRepository;
+    private final AuditClient auditClient;
 
    @Transactional
     public AccountResponseDto createAccount(AccountRequestDto request) {
@@ -40,6 +45,14 @@ public class AccountService {
 
         // 3. Persist
         Account savedAccount = accountRepository.save(account);
+
+        auditClient.createAuditEvent(AuditEventRequestDto.builder()
+                .correlationId("rterter") //TODO: what would be a corelation id here?
+                .accountNumber(generatedAccountNumber)
+                .eventType(AuditEventType.ACCOUNT_CREATED)
+                .serviceName("AccountService")
+                        .transactionReference("sfsdfsdfs")
+                .status(AuditStatus.SUCCESS).build());
 
         // 4. Return a Response DTO(Never return the Entity itself)
         return mapToResponseDto(savedAccount);
@@ -86,6 +99,28 @@ public class AccountService {
         // 4. Persist idempotency key for demo-level duplicate protection.
         // Production design should store all processed keys in a separate idempotency table.
         int keyRowsUpdated = accountRepository.updateLastTxId(accNum, key);
+        try {
+            auditClient.createAuditEvent(
+                    AuditEventRequestDto.builder()
+                            .correlationId(key)
+                            .transactionReference(key)
+                            .accountNumber(accNum)
+                            .serviceName("account-service")
+                            .eventType(
+                                    amount.signum() < 0
+                                            ? AuditEventType.DEBIT_SUCCESS
+                                            : AuditEventType.CREDIT_SUCCESS
+                            )
+                            .status(AuditStatus.SUCCESS)
+                            .remarks("Balance updated")
+                            .build()
+            );
+        }  catch(Exception e) {
+            log.error(
+                    "Audit service unavailable: {}",
+                    e.getMessage()
+            );
+        }
 
         if (keyRowsUpdated == 0) {
             throw new IllegalStateException(
